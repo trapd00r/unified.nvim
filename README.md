@@ -18,7 +18,8 @@ The main use case is:
 - `vim -c "Unified <commit>" <files...>` to open one or more files and immediately show inline diffs
 - `vim -c "Unified <commit>"` to open all files changed in that commit
 
-<img width="1840" alt="image" src="https://github.com/user-attachments/assets/7655659e-c8af-40c5-ad70-59f67a2b16d9" />
+<img width="674" height="255" alt="unified" src="https://github.com/user-attachments/assets/be127078-08c1-4731-9f09-d3d2dd7528f1" />
+
 
 ## Features
 
