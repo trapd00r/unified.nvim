@@ -35,4 +35,16 @@ function M.previous_hunk()
   jump(false)
 end
 
+function M.attach_buffer_keymaps(bufnr)
+  vim.keymap.set("n", ",n", M.next_hunk, {
+    buffer = bufnr,
+    silent = true,
+    desc = "Unified next hunk",
+  })
+end
+
+function M.clear_buffer_keymaps(bufnr)
+  pcall(vim.keymap.del, "n", ",n", { buffer = bufnr })
+end
+
 return M

@@ -1,23 +1,38 @@
 # unified.nvim
 
-A Neovim plugin for displaying inline unified diffs directly in your buffer.
+A Neovim plugin for displaying inline git diffs directly inside normal file buffers.
+
+This version is focused on a simple editing workflow instead of a file browser:
+
+- show added, changed, and removed lines inline in the current buffer
+- diff live buffer contents, not just the version on disk
+- compare against `HEAD` or any commit / ref
+- open all files changed in a specific commit when only a commit hash is given
+- preserve normal syntax highlighting as much as possible
+- auto-refresh while editing
+
+The main use case is:
+
+- `:Unified` to diff the current file(s) against `HEAD`
+- `:Unified <commit>` to diff the current file(s) against a specific commit
+- `vim -c "Unified <commit>" <files...>` to open one or more files and immediately show inline diffs
+- `vim -c "Unified <commit>"` to open all files changed in that commit
 
 <img width="1840" alt="image" src="https://github.com/user-attachments/assets/7655659e-c8af-40c5-ad70-59f67a2b16d9" />
 
 ## Features
 
-* **Inline Diffs**: View git diffs directly in your buffer, without needing a separate window.
-* **File Tree Explorer**: A file tree explorer is displayed, showing all files that have been changed.
-* **Git Gutter Signs**: Gutter signs are used to indicate added, modified, and deleted lines.
-* **Customizable**: Configure the signs, highlights, and line symbols to your liking.
-* **Auto-refresh**: The diff view automatically refreshes as you make changes to the buffer.
+* **Inline Diffs**: View git diffs directly in your buffer, without opening a diff split.
+* **Current-file Workflow**: Works directly in normal editing buffers and supports multiple open buffers.
+* **Commit Mode**: If you start Neovim with only a commit/ref, Unified opens the files changed in that commit.
+* **Git Gutter Signs**: Gutter signs indicate added and removed hunks.
+* **Syntax-friendly Rendering**: Normal syntax highlighting is preserved while diff lines get `DiffAdd` / `DiffDelete` style backgrounds.
+* **Auto-refresh**: The diff view refreshes as you edit the buffer.
 
 ## Requirements
 
 -   Neovim >= 0.5.0
 -   Git
--   A [Nerd Font](https://www.nerdfonts.com/) installed and configured in your terminal/GUI is required to display file icons correctly in the file tree.
--   (Optional) [snacks.nvim](https://github.com/folke/snacks.nvim) - Required only if you want to use the Snacks file explorer backend instead of the default custom file tree.
 
 ## Installation
 
@@ -82,73 +97,70 @@ require('unified').setup({
 
 1.  Open a file in a git repository.
 2.  Make some changes to the file.
-3.  Run the command `:Unified` to display the diff against `HEAD` and open the file tree.
-4.  To close the diff view and file tree, run `:Unified reset`.
+3.  Run `:Unified` to display the diff against `HEAD`.
+4.  To close the diff view, run `:Unified reset`.
 5.  To show the diff against a specific commit, run `:Unified <commit_ref>`, for example `:Unified HEAD~1`.
+6.  If no file buffers are open and you run `:Unified <commit_ref>`, Unified opens the files changed in that commit.
 
-### Snacks Integration (Optional)
+Examples:
 
-unified.nvim supports integration with [snacks.nvim](https://github.com/folke/snacks.nvim)'s git_diff picker as an alternative file browser. This provides a feature-rich experience with built-in diff previews, git status formatting, and staging capabilities.
+```vim
+:Unified
+:Unified HEAD~1
+```
 
-**Installation:**
+From the shell:
 
-First, install snacks.nvim:
+```sh
+vim -c "Unified HEAD~1" path/to/file.php
+vim -c "Unified 53bff637"
+```
 
-```lua
-{
-  'folke/snacks.nvim',
-  priority = 1000,
-  lazy = false,
-  opts = {
-    -- your snacks config
-  }
+### Example Shell Helper
+
+If you often want "open these files with Unified enabled, or if no files are given open the files changed in this commit", a small shell function is convenient:
+
+```sh
+gD () {
+	local commit="HEAD" 
+	local -a files
+	for arg in "$@"
+	do
+		if [[ -f "$arg" || -d "$arg" ]]
+		then
+			files+=("$arg") 
+		else
+			commit="$arg" 
+		fi
+	done
+	if (( ${#files[@]} > 0 ))
+	then
+		vim -c "Unified $commit" "${files[@]}"
+	else
+		vim -c "Unified $commit"
+	fi
 }
 ```
 
-**Commands:**
+What it does:
 
-```vim
-:Unified -s HEAD        " Use Snacks picker, compare against HEAD
-:Unified -s HEAD~1      " Use Snacks picker, compare against HEAD~1
-:Unified -s origin/main " Use Snacks picker, compare against origin/main
+- treats non-file arguments as the git commit/ref to diff against
+- treats file or directory arguments as paths to open in Vim
+- defaults to `HEAD` if you do not pass a commit
+- runs `vim -c "Unified $commit"` with the files you passed
+- if you pass only a commit, opens Vim and lets Unified load all files changed in that commit
+
+Examples:
+
+```sh
+gD
+gD HEAD~1 path/to/file.php
+gD 53bff637
 ```
-
-The Snacks picker provides:
-- Built-in diff preview pane
-- Git status indicators and formatting
-- File staging with `<Tab>`
-- File restoration with `<c-r>`
-- All standard unified.nvim inline diff functionality when files are selected
-
-### File Tree Interaction (Default Backend)
-
-When the default file tree is open, you can use the following keymaps:
-
-  * `j`/`k` or `<Down>`/`<Up>`: Move the cursor down/up between file nodes.
-  * `l`: Open the file under the cursor in the main window, displaying its diff.
-  * `q`: Close the file tree window.
-  * `R`: Refresh the file tree.
-  * `?`: Show a help dialog.
-
-When the file tree opens, the first file is automatically opened in the main window.
-
-The file tree displays the Git status of each file:
-
-  - `M`: Modified
-  - `A`: Added
-  - `D`: Deleted
-  - `R`: Renamed
-  - `C`: Copied
-  - `?`: Untracked
 
 ### Navigating Hunks
 
-To navigate between hunks, you'll need to set your own keymaps:
-
-```lua
-vim.keymap.set('n', ']h', function() require('unified.navigation').next_hunk() end)
-vim.keymap.set('n', '[h', function() require('unified.navigation').previous_hunk() end)
-```
+While Unified is active, it can install buffer-local hunk navigation mappings for the diffed buffers. In the setup used here, `,n` is overridden buffer-locally to jump to the next Unified hunk without affecting your normal global mapping outside Unified buffers.
 
 ### Toggle API
 

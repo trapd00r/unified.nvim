@@ -3,6 +3,27 @@ local M = {}
 local config = require("unified.config")
 local hunk_store = require("unified.hunk_store")
 
+local function line_end_col(buf, row)
+  local lines = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)
+  return lines[1] and #lines[1] or 0
+end
+
+local function set_list_for_buffer_windows(buffer, enabled)
+  for _, win in ipairs(vim.fn.win_findbuf(buffer)) do
+    if vim.api.nvim_win_is_valid(win) then
+      if enabled then
+        if vim.w[win].unified_saved_list == nil then
+          vim.w[win].unified_saved_list = vim.wo[win].list
+        end
+        vim.wo[win].list = false
+      elseif vim.w[win].unified_saved_list ~= nil then
+        vim.wo[win].list = vim.w[win].unified_saved_list
+        vim.w[win].unified_saved_list = nil
+      end
+    end
+  end
+end
+
 -- Parse diff and return a structured representation
 function M.parse_diff(diff_text)
   local lines = vim.split(diff_text, "\n")
@@ -48,6 +69,7 @@ function M.display_deleted_file(buffer, blob_text)
   local ns_id = config.ns_id
   vim.api.nvim_buf_clear_namespace(buffer, ns_id, 0, -1)
   vim.fn.sign_unplace("unified_diff", { buffer = buffer })
+  set_list_for_buffer_windows(buffer, true)
 
   local lines = vim.split(blob_text, "\n", { plain = true })
   local was_modifiable = vim.bo[buffer].modifiable
@@ -82,6 +104,7 @@ function M.display_inline_diff(buffer, hunks)
 
   -- Clear existing signs
   vim.fn.sign_unplace("unified_diff", { buffer = buffer })
+  set_list_for_buffer_windows(buffer, true)
 
   local new_hunk_lines = {}
 
@@ -226,11 +249,17 @@ function M.display_inline_diff(buffer, hunks)
           -- Check if this is part of consecutive added lines
           local consecutive_count = consecutive_added_lines[line_idx - new_idx + old_idx] or 0
 
-          -- Use a single extmark with both sign and line highlighting
+          -- line_hl_group covers the EOL area (past the last character).
+          -- hl_group at priority 1000 covers the content area and wins over
+          -- treesitter character backgrounds that would otherwise cause black patches.
           local extmark_opts = {
-            sign_text = config.values.line_symbols.add .. " ", -- Add sign in gutter
+            sign_text = config.values.line_symbols.add .. " ",
             sign_hl_group = config.values.highlights.add,
             line_hl_group = hl_group,
+            end_col = line_end_col(buffer, line_idx),
+            hl_group = hl_group,
+            hl_eol = true,
+            priority = 1000,
           }
           local mark_id = vim.api.nvim_buf_set_extmark(buffer, ns_id, line_idx, 0, extmark_opts)
           if mark_id > 0 then
@@ -243,13 +272,15 @@ function M.display_inline_diff(buffer, hunks)
               for i = 1, consecutive_count - 1 do
                 local next_line_idx = line_idx + i
 
-                -- Process only if next line is within range and not already marked
                 if next_line_idx < buf_line_count and not marked_lines[next_line_idx] then
-                  -- Use a single extmark with both sign and line highlighting for consecutive lines
                   local consec_extmark_opts = {
-                    sign_text = config.values.line_symbols.add .. " ", -- Add sign in gutter
+                    sign_text = config.values.line_symbols.add .. " ",
                     sign_hl_group = config.values.highlights.add,
                     line_hl_group = hl_group,
+                    end_col = line_end_col(buffer, next_line_idx),
+                    hl_group = hl_group,
+                    hl_eol = true,
+                    priority = 1000,
                   }
                   local consec_mark_id =
                     vim.api.nvim_buf_set_extmark(buffer, ns_id, next_line_idx, 0, consec_extmark_opts)
@@ -337,6 +368,14 @@ function M.show_current(commit)
   end
 
   return M.show(commit, buf)
+end
+
+function M.disable_listchars(buffer)
+  set_list_for_buffer_windows(buffer, true)
+end
+
+function M.restore_listchars(buffer)
+  set_list_for_buffer_windows(buffer, false)
 end
 
 return M
